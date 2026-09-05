@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VocalBridge - Dubbing Portal</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+
+        .card {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .field {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        #statusBox {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f4f4f4;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2>VocalBridge: Hyper-Local Dubbing</h2>
+
+        <div class="field">
+            <label for="audioFile">Upload Scheme Audio (English/Hindi):</label>
+            <input type="file" id="audioFile" accept="audio/*">
+        </div>
+
+        <div class="field">
+            <label for="targetLang">Select Target Regional Language:</label>
+            <select id="targetLang">
+                <option value="hi-IN">Hindi (hi-IN)</option>
+                <option value="ta-IN">Tamil (ta-IN)</option>
+                <option value="te-IN">Telugu (te-IN)</option>
+                <option value="bn-IN">Bengali (bn-IN)</option>
+                <option value="mr-IN">Marathi (mr-IN)</option>
+            </select>
+        </div>
+
+        <button id="submitBtn" onclick="submitJob()">Start Dubbing</button>
+
+        <div id="statusBox">
+            <p><strong>Job ID:</strong> <span id="displayJobId">-</span></p>
+            <p><strong>Status:</strong> <span id="displayStatus">Pending...</span></p>
+        </div>
+    </div>
+
+    <script>
+        let pollInterval = null;
+
+        async function submitJob() {
+            const fileInput = document.getElementById('audioFile');
+            const targetLang = document.getElementById('targetLang').value;
+            const statusBox = document.getElementById('statusBox');
+            const displayJobId = document.getElementById('displayJobId');
+            const displayStatus = document.getElementById('displayStatus');
+
+            if (!fileInput.files[0]) {
+                alert("Please select an audio file first.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            formData.append("target_language_code", targetLang);
+
+            statusBox.style.display = "block";
+            displayStatus.innerText = "Submitting to backend...";
+
+            try {
+                const res = await fetch("/submit-job", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (data.job_id) {
+                    displayJobId.innerText = data.job_id;
+                    displayStatus.innerText = "Job created. Polling Sarvam status...";
+
+                    if (pollInterval) clearInterval(pollInterval);
+                    pollInterval = setInterval(() => checkStatus(data.job_id), 3000);
+                } else {
+                    displayStatus.innerText = "Error: " + (data.error || "Failed to get job ID");
+                }
+            } catch (err) {
+                displayStatus.innerText = "Network error connecting to /submit-job";
+            }
+        }
+
+        async function checkStatus(jobId) {
+            const displayStatus = document.getElementById('displayStatus');
+            try {
+                const res = await fetch(`/job-status/${jobId}`);
+                const data = await res.json();
+
+                displayStatus.innerText = JSON.stringify(data.status || data);
+
+                if (data.status === "COMPLETED" || data.status === "FAILED") {
+                    clearInterval(pollInterval);
+                }
+            } catch (err) {
+                displayStatus.innerText = "Error polling job status";
+            }
+        }
+    </script>
+
+</body>
+
+</html>
